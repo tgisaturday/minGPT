@@ -1,3 +1,4 @@
+import logging
 import math
 import os
 from argparse import ArgumentParser
@@ -6,6 +7,7 @@ import numpy as np
 import torch
 from pytorch_lightning import Trainer
 from pytorch_lightning import seed_everything
+from pytorch_lightning.plugins import DeepSpeedPlugin
 from pytorch_lightning.utilities import rank_zero_info
 from torch.utils.data import Dataset, DataLoader
 
@@ -76,11 +78,44 @@ if __name__ == '__main__':
         warmup_tokens=512 * 20,
         final_tokens=2 * len(train_dataset) * args.block_size
     )
+    config = {
+        "optimizer": {
+            "type": "AdamW",
+            "params": {
+                "lr": 3e-5,
+                "betas": [0.998, 0.999],
+                "eps": 1e-5,
+                "weight_decay": 1e-9,
+            },
+        },
+        'scheduler': {
+            "type": "WarmupLR",
+            "params": {
+                "last_batch_iteration": -1,
+                "warmup_min_lr": 0,
+                "warmup_max_lr": 3e-5,
+                "warmup_num_steps": 100,
+            }
+        },
+        "zero_optimization": {
+            "stage": 3,
+            "cpu_offload": True,
+            "cpu_offload_params": True,
+            "cpu_offload_use_pin_memory": True,
+            "overlap_comm": True,
+            "contiguous_gradients": True,
+            "allgather_partitions": True,
+            # "allgather_bucket_size": 2e8,
+            # "reduce_bucket_size": 2e8,
+        }
+    }
 
     trainer = Trainer.from_argparse_args(
         args,
         max_epochs=1,
         gradient_clip_val=1.0,
+        plugins=DeepSpeedPlugin(config=config, logging_level=logging.INFO),
+        checkpoint_callback=False,
         callbacks=[lr_decay, CUDACallback()],
     )
     trainer.fit(model, train_loader)

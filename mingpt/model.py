@@ -13,6 +13,7 @@ import logging
 import torch
 
 import torch.nn as nn
+
 from torch.nn import functional as F
 import pytorch_lightning as pl
 
@@ -28,14 +29,16 @@ class GPTConfig:
     def __init__(self, vocab_size, block_size, **kwargs):
         self.vocab_size = vocab_size
         self.block_size = block_size
-        for k,v in kwargs.items():
+        for k, v in kwargs.items():
             setattr(self, k, v)
+
 
 class GPT1Config(GPTConfig):
     """ GPT-1 like network roughly 125M params """
     n_layer = 12
     n_head = 12
     n_embd = 768
+
 
 class CausalSelfAttention(nn.Module):
     """
@@ -58,28 +61,29 @@ class CausalSelfAttention(nn.Module):
         self.proj = nn.Linear(config.n_embd, config.n_embd)
         # causal mask to ensure that attention is only applied to the left in the input sequence
         self.register_buffer("mask", torch.tril(torch.ones(config.block_size, config.block_size))
-                                     .view(1, 1, config.block_size, config.block_size))
+                             .view(1, 1, config.block_size, config.block_size))
         self.n_head = config.n_head
 
     def forward(self, x, layer_past=None):
         B, T, C = x.size()
 
         # calculate query, key, values for all heads in batch and move head forward to be the batch dim
-        k = self.key(x).view(B, T, self.n_head, C // self.n_head).transpose(1, 2) # (B, nh, T, hs)
-        q = self.query(x).view(B, T, self.n_head, C // self.n_head).transpose(1, 2) # (B, nh, T, hs)
-        v = self.value(x).view(B, T, self.n_head, C // self.n_head).transpose(1, 2) # (B, nh, T, hs)
+        k = self.key(x).view(B, T, self.n_head, C // self.n_head).transpose(1, 2)  # (B, nh, T, hs)
+        q = self.query(x).view(B, T, self.n_head, C // self.n_head).transpose(1, 2)  # (B, nh, T, hs)
+        v = self.value(x).view(B, T, self.n_head, C // self.n_head).transpose(1, 2)  # (B, nh, T, hs)
 
         # causal self-attention; Self-attend: (B, nh, T, hs) x (B, nh, hs, T) -> (B, nh, T, T)
         att = (q @ k.transpose(-2, -1)) * (1.0 / math.sqrt(k.size(-1)))
-        att = att.masked_fill(self.mask[:,:,:T,:T] == 0, float('-inf'))
+        att = att.masked_fill(self.mask[:, :, :T, :T] == 0, float('-inf'))
         att = F.softmax(att, dim=-1)
         att = self.attn_drop(att)
-        y = att @ v # (B, nh, T, T) x (B, nh, T, hs) -> (B, nh, T, hs)
-        y = y.transpose(1, 2).contiguous().view(B, T, C) # re-assemble all head outputs side by side
+        y = att @ v  # (B, nh, T, T) x (B, nh, T, hs) -> (B, nh, T, hs)
+        y = y.transpose(1, 2).contiguous().view(B, T, C)  # re-assemble all head outputs side by side
 
         # output projection
         y = self.resid_drop(self.proj(y))
         return y
+
 
 class Block(nn.Module):
     """ an unassuming Transformer block """
@@ -104,6 +108,7 @@ class Block(nn.Module):
 
 class GPT(pl.LightningModule):
     """  the full GPT language model, with a context size of block_size """
+
     def __init__(self,
                  vocab_size,
                  weight_decay=0.1,
@@ -128,14 +133,14 @@ class GPT(pl.LightningModule):
         self.tok_emb = nn.Embedding(vocab_size, n_embd)
         self.pos_emb = nn.Parameter(torch.zeros(1, block_size, n_embd))
         self.drop = nn.Dropout(embd_pdrop)
-        # transformer
-        self.blocks = nn.Sequential(*[Block(self.config) for _ in range(self.config.n_layer)])
+        # # transformer
+        # self.blocks = nn.Sequential(*[Block(self.config) for _ in range(self.config.n_layer)])
         # decoder head
         self.ln_f = nn.LayerNorm(self.config.n_embd)
         self.head = nn.Linear(self.config.n_embd, self.config.vocab_size, bias=False)
 
         self.block_size = self.config.block_size
-        self.apply(self._init_weights)
+        # self.apply(self._init_weights)
 
         logger.info("number of parameters: %e", sum(p.numel() for p in self.parameters()))
 
@@ -148,28 +153,27 @@ class GPT(pl.LightningModule):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
 
+    def on_model_parallel_setup(self):
+        """
+        This hook allows us to setup layers within a context that auto shards the model as it is created.
+        """
+        # transformer
+        self.blocks = nn.Sequential(*[Block(self.config) for _ in range(self.config.n_layer)])
+
     def get_block_size(self):
         return self.block_size
 
     def configure_optimizers(self):
-        # create the optimizer
-        no_decay = ["bias", "LayerNorm.weight"]
-        params_decay = [p for n, p in self.named_parameters() if not any(nd in n for nd in no_decay)]
-        params_nodecay = [p for n, p in self.named_parameters() if any(nd in n for nd in no_decay)]
-        optim_groups = [
-            {"params": params_decay, "weight_decay": self.hparams.weight_decay},
-            {"params": params_nodecay, "weight_decay": 0.0},
-        ]
-        optimizer = torch.optim.AdamW(optim_groups, lr=self.hparams.learning_rate, betas=self.hparams.betas)
-        return optimizer
+        # TODO: for now rely on the DeepSpeed engine config to set the scheduler/optimizer
+        pass
 
     def forward(self, idx):
         b, t = idx.size()
         assert t <= self.block_size, "Cannot forward, model block size is exhausted."
 
         # forward the GPT model
-        token_embeddings = self.tok_emb(idx) # each index maps to a (learnable) vector
-        position_embeddings = self.pos_emb[:, :t, :] # each position maps to a (learnable) vector
+        token_embeddings = self.tok_emb(idx)  # each index maps to a (learnable) vector
+        position_embeddings = self.pos_emb[:, :t, :]  # each position maps to a (learnable) vector
         x = self.drop(token_embeddings + position_embeddings)
         x = self.blocks(x)
         x = self.ln_f(x)
@@ -188,4 +192,3 @@ class GPT(pl.LightningModule):
 
         self.log('train_loss', loss)
         return loss
-

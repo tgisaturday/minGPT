@@ -10,69 +10,54 @@ Modified [Andrej's](https://github.com/karpathy/minGPT) and [William's](https://
 pip install -r requirements.txt
 ```
 
-We benchmark a few different models with different configurations. Below is an example of some of the configurations we can run:
-
-```bash
-# 1.6B parameters
-python benchmark.py --n_layer 14 --n_head 16 --n_embd 3072 --gpus 8 --precision 16 --accelerator ddp --limit_train_batches 120
-```
-
-```bash
-# 2.5B parameters
-python benchmark.py --n_layer 22 --n_head 16 --n_embd 3072 --gpus 8 --plugins deepspeed --precision 16 --limit_train_batches 120
-```
-
-```bash
-# 13B parameters, only possible with DeepSpeed
-python benchmark.py --n_layer 16 --n_head 16 --n_embd 8192 --gpus 8 --plugins deepspeed --precision 16 --limit_train_batches 120
-```
-
 ### Results
 
 Results were collected on an 8 GPU A100 server.
 
-#### DDP vs DeepSpeed
+#### Maximum DeepSpeed
 
-The first set of results we collected were using a model size that fit training with DDP (roughly 1.6B parameters). 
-When using DeepSpeed, I noticed that for the first 20 batches the optimizer step was skipped as infs were detected.
+Largest model I could fit onto 8 A100 GPUs with 990GB of CPU RAM
+
+##### DeepSpeed ZeRO Stage 3 Offload
+
+```
+~20B
+python benchmark.py --n_layer 21 --n_head 16 --n_embd 8192 --gpus 8 --plugins deepspeed --precision 16 --limit_train_batches 120 --batch_size 1
+
+Average Epoch time: 45.65 seconds
+Average Peak memory 36086.14MiB
+```
+
+#### Smaller Model Comparison, DDP vs DeepSpeed
+
+We collected results using a model size that fit training with DDP (roughly 1.6B parameters). 
+
+This benchmark simulates the improvement in memory when training larger models, which is useful for users that do not have access to high memory GPUs.
+
+A technical note: when using DeepSpeed, I noticed that for the first 20 batches, the optimizer step were skipped as infs were detected.
 
 Command:
 ```bash
 1.6B
-python benchmark.py --n_layer 14 --n_head 16 --n_embd 3072 --gpus 8 --accelerator ddp --precision 16 --limit_train_batches 120
+python benchmark.py --n_layer 14 --n_head 16 --n_embd 3072 --gpus 8 --precision 16 --limit_train_batches 128
 ```
 
 ##### DDP
 ```
-Average Epoch time: 40.27 seconds
-Average Peak memory 35834.96MiB
-```
-##### DeepSpeed Default (With ZeRO-Offload)
-```
-Average Epoch time: 357.26 seconds
-Average Peak memory 9993.60MiB
-```
-##### DeepSpeed With ZeRO, no Offload
-```
-Average Epoch time: 18.41 seconds
-Average Peak memory 12625.53MiB
-```
-##### DeepSpeed Without ZeRO-Offload (requires instantiating the plugin, example below)
-```
-Average Epoch time: 33.27 seconds
-Average Peak memory 30698.40MiB
+python benchmark.py --n_layer 14 --n_head 16 --n_embd 3072 --gpus 8 --precision 16 --limit_train_batches 128
+TODO
 ```
 
-#### Maximum DeepSpeed!
-
-My attempt to get the fit the largest model I could train on this machine reasonably:
-
+##### DeepSpeed ZeRO Stage 3
 ```
-12.9B
-python benchmark.py --n_layer 16 --n_head 16 --n_embd 8192 --gpus 8 --plugins deepspeed --precision 16 --limit_train_batches 120
+Average Epoch time: 42.89 seconds
+Average Peak memory 8813.29MiB
+```
 
-Average Epoch time: 1700.02 seconds
-Average Peak memory 35430.12MiB
+##### DeepSpeed ZeRO Stage 3 Offload
+```
+Average Epoch time: 151.12 seconds
+Average Peak memory 5804.81MiB
 ```
 
 #### Instantiating DeepSpeed
