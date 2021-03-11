@@ -164,7 +164,7 @@ class GPT(pl.LightningModule):
         This hook allows us to setup layers within a context that auto shards the model as it is created.
         """
         # # transformer
-        self.blocks = nn.ModuleList([*[Block(self.config) for _ in range(self.config.n_layer)]])
+        self.blocks = nn.ModuleList([Block(self.config) for _ in range(self.config.n_layer)])
 
     def get_block_size(self):
         return self.block_size
