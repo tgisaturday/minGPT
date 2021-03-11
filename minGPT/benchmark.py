@@ -47,7 +47,7 @@ if __name__ == '__main__':
     parser = Trainer.add_argparse_args(parser)
     parser.add_argument('--n_layer', default=22, type=int)
     parser.add_argument('--n_head', default=16, type=int)
-    parser.add_argument('--n_embd', default=3072, type=int)
+    parser.add_argument('--n_embd', default=728, type=int)
     parser.add_argument('--learning_rate', default=6e-4, type=float)
     parser.add_argument('--block_size', default=128, type=int)
     parser.add_argument('--batch_size', default=8, type=int)
@@ -80,6 +80,7 @@ if __name__ == '__main__':
     trainer = Trainer.from_argparse_args(
         args,
         max_epochs=1,
+        accelerator="ddp_sm",
         gradient_clip_val=1.0,
         callbacks=[lr_decay, CUDACallback()],
     )
