@@ -10,6 +10,7 @@ GPT model:
 import math
 import logging
 
+import deepspeed
 import torch
 
 import torch.nn as nn
@@ -133,16 +134,21 @@ class GPT(pl.LightningModule):
         self.tok_emb = nn.Embedding(vocab_size, n_embd)
         self.pos_emb = nn.Parameter(torch.zeros(1, block_size, n_embd))
         self.drop = nn.Dropout(embd_pdrop)
-        # # transformer
+
+        """
+        We've omitted loading the transformer blocks in the __init__ function
+        Blocks are initialized in the `on_model_parallel_setup` hook below within the DeepSpeed context.
+        """
+
+        # transformer
         # self.blocks = nn.Sequential(*[Block(self.config) for _ in range(self.config.n_layer)])
+
         # decoder head
         self.ln_f = nn.LayerNorm(self.config.n_embd)
         self.head = nn.Linear(self.config.n_embd, self.config.vocab_size, bias=False)
 
         self.block_size = self.config.block_size
         # self.apply(self._init_weights)
-
-        logger.info("number of parameters: %e", sum(p.numel() for p in self.parameters()))
 
     def _init_weights(self, module):
         if isinstance(module, (nn.Linear, nn.Embedding)):
@@ -157,8 +163,8 @@ class GPT(pl.LightningModule):
         """
         This hook allows us to setup layers within a context that auto shards the model as it is created.
         """
-        # transformer
-        self.blocks = nn.Sequential(*[Block(self.config) for _ in range(self.config.n_layer)])
+        # # transformer
+        self.blocks = nn.ModuleList([*[Block(self.config) for _ in range(self.config.n_layer)]])
 
     def get_block_size(self):
         return self.block_size
@@ -175,7 +181,8 @@ class GPT(pl.LightningModule):
         token_embeddings = self.tok_emb(idx)  # each index maps to a (learnable) vector
         position_embeddings = self.pos_emb[:, :t, :]  # each position maps to a (learnable) vector
         x = self.drop(token_embeddings + position_embeddings)
-        x = self.blocks(x)
+        for block in self.blocks:
+            x = deepspeed.checkpointing.checkpoint(block, x)
         x = self.ln_f(x)
         logits = self.head(x)
         return logits

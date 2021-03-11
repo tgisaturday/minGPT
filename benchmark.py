@@ -105,8 +105,6 @@ if __name__ == '__main__':
             "overlap_comm": True,
             "contiguous_gradients": True,
             "allgather_partitions": True,
-            # "allgather_bucket_size": 2e8,
-            # "reduce_bucket_size": 2e8,
         }
     }
 
