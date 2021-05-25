@@ -1,1 +1,1 @@
-git+https://github.com/kaushikb11/pytorch-lightning.git@smddp
+git+https://github.com/kaushikb11/pytorch-lightning.git

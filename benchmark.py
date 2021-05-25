@@ -9,7 +9,6 @@ from pytorch_lightning import seed_everything
 from pytorch_lightning.utilities import rank_zero_info
 from torch.utils.data import Dataset, DataLoader
 
-from mingpt.callback import CUDACallback
 from mingpt.lr_decay import LearningRateDecayCallback
 from mingpt.model import GPT
 
@@ -50,7 +49,7 @@ if __name__ == '__main__':
     parser.add_argument('--n_embd', default=728, type=int)
     parser.add_argument('--learning_rate', default=6e-4, type=float)
     parser.add_argument('--block_size', default=128, type=int)
-    parser.add_argument('--batch_size', default=8, type=int)
+    parser.add_argument('--batch_size', default=128, type=int)
     parser.add_argument('--num_workers', default=4, type=int)
     args = parser.parse_args()
 
@@ -79,9 +78,9 @@ if __name__ == '__main__':
 
     trainer = Trainer.from_argparse_args(
         args,
-        max_epochs=1,
-        accelerator="ddp_sm",
+        max_epochs=5,
+        tpu_cores=8,
         gradient_clip_val=1.0,
-        callbacks=[lr_decay, CUDACallback()],
+        callbacks=[lr_decay],
     )
     trainer.fit(model, train_loader)
