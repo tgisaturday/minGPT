@@ -49,8 +49,8 @@ if __name__ == '__main__':
     parser.add_argument('--n_embd', default=720, type=int)
     parser.add_argument('--learning_rate', default=6e-4, type=float)
     parser.add_argument('--block_size', default=128, type=int)
-    parser.add_argument('--batch_size', default=128, type=int)
-    parser.add_argument('--num_workers', default=4, type=int)
+    parser.add_argument('--batch_size', default=64, type=int)
+    parser.add_argument('--num_workers', default=16, type=int)
     args = parser.parse_args()
 
     if not os.path.exists("input.txt"):
