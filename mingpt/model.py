@@ -71,7 +71,7 @@ class CausalSelfAttention(nn.Module):
 
         # causal self-attention; Self-attend: (B, nh, T, hs) x (B, nh, hs, T) -> (B, nh, T, T)
         att = (q @ k.transpose(-2, -1)) * (1.0 / math.sqrt(k.size(-1)))
-        #att.masked_fill_(self.mask[:,:,:T,:T] == 0, float('-inf'))
+        att.masked_fill_(self.mask[:,:,:T,:T] == 0, float('-inf'))
         att = F.softmax(att, dim=-1)
         att = self.attn_drop(att)
         y = att @ v # (B, nh, T, T) x (B, nh, T, hs) -> (B, nh, T, hs)
@@ -86,13 +86,12 @@ class Block(nn.Module):
 
     def __init__(self, config):
         super().__init__()
-        #self.ln1 = nn.LayerNorm(config.n_embd)
-        #self.ln2 = nn.LayerNorm(config.n_embd)
+        self.ln1 = nn.LayerNorm(config.n_embd)
+        self.ln2 = nn.LayerNorm(config.n_embd)
         self.attn = CausalSelfAttention(config)
         self.mlp = nn.Sequential(
             nn.Linear(config.n_embd, 4 * config.n_embd),
-            #nn.GELU(),
-            nn.ReLU(),
+            nn.GELU(),
             nn.Linear(4 * config.n_embd, config.n_embd),
             nn.Dropout(config.resid_pdrop),
         )
@@ -127,7 +126,7 @@ class GPT(pl.LightningModule):
 
         # input embedding stem
         self.tok_emb = nn.Embedding(vocab_size, n_embd)
-        self.pos_emb = nn.Parameter(torch.zeros(1, block_size, n_embd))
+        #self.pos_emb = nn.Parameter(torch.zeros(1, block_size, n_embd))
         self.drop = nn.Dropout(embd_pdrop)
         # transformer
         self.blocks = nn.Sequential(*[Block(self.config) for _ in range(self.config.n_layer)])
@@ -136,7 +135,7 @@ class GPT(pl.LightningModule):
         self.head = nn.Linear(self.config.n_embd, self.config.vocab_size, bias=False)
 
         self.block_size = self.config.block_size
-        #self.apply(self._init_weights)
+        self.apply(self._init_weights)
 
         logger.info("number of parameters: %e", sum(p.numel() for p in self.parameters()))
 
@@ -170,8 +169,9 @@ class GPT(pl.LightningModule):
 
         # forward the GPT model
         token_embeddings = self.tok_emb(idx) # each index maps to a (learnable) vector
-        position_embeddings = self.pos_emb[:, :t, :] # each position maps to a (learnable) vector
-        x = self.drop(token_embeddings + position_embeddings)
+        #position_embeddings = self.pos_emb[:, :t, :] # each position maps to a (learnable) vector
+        #x = self.drop(token_embeddings + position_embeddings)
+        x = self.drop(token_embeddings)       
         x = self.blocks(x)
         x = self.ln_f(x)
         logits = self.head(x)
