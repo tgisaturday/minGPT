@@ -56,13 +56,10 @@ class CharDataModule(LightningDataModule):
         # you can download this file at https://github.com/karpathy/char-rnn/blob/master/data/tinyshakespeare/input.txt
         text = open('input.txt', 'r').read()  # don't worry we won't run out of file handles
         self.train_dataset = CharDataset(text, self.block_size)  # one line of poem is roughly 50 characters
-        self.val_dataset = CharDataset(text, self.block_size)  # one line of poem is roughly 50 characters
-  
 
     def train_dataloader(self):
         return DataLoader(self.train_dataset, batch_size=self.batch_size, num_workers=self.num_workers)
-    def val_dataloader(self):
-        return DataLoader(self.val_dataset, batch_size=self.batch_size, num_workers=self.num_workers)
+
 
 if __name__ == '__main__':
     seed_everything(42)
