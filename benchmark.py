@@ -9,6 +9,7 @@ from pytorch_lightning import seed_everything
 from pytorch_lightning.utilities import rank_zero_info
 from pytorch_lightning.callbacks import XLAStatsMonitor
 from torch.utils.data import Dataset, DataLoader
+from pytorch_lightning import LightningDataModule
 
 from mingpt.lr_decay import LearningRateDecayCallback
 from mingpt.model import GPT
@@ -39,6 +40,29 @@ class CharDataset(Dataset):
         y = torch.tensor(dix[1:], dtype=torch.long)
         return x, y
 
+class CharDataModule(LightningDataModule):
+
+    def __init__(self, batch_size, num_workers, block_size):
+        super().__init__()
+        self.batch_size = batch_size
+        self.num_workers = num_workers
+        self.block_size = block_size
+
+                                    
+    def setup(self, stage=None):
+        if not os.path.exists("input.txt"):
+            os.system("wget https://raw.githubusercontent.com/karpathy/char-rnn/master/data/tinyshakespeare/input.txt")
+
+        # you can download this file at https://github.com/karpathy/char-rnn/blob/master/data/tinyshakespeare/input.txt
+        text = open('input.txt', 'r').read()  # don't worry we won't run out of file handles
+        self.train_dataset = CharDataset(text, self.block_size)  # one line of poem is roughly 50 characters
+        self.val_dataset = CharDataset(text, self.block_size)  # one line of poem is roughly 50 characters
+  
+
+    def train_dataloader(self):
+        return DataLoader(self.train_dataset, batch_size=self.batch_size, num_workers=self.num_workers)
+    def val_dataloader(self):
+        return DataLoader(self.val_dataset, batch_size=self.batch_size, num_workers=self.num_workers)
 
 if __name__ == '__main__':
     seed_everything(42)
@@ -57,14 +81,11 @@ if __name__ == '__main__':
     if not os.path.exists("input.txt"):
         os.system("wget https://raw.githubusercontent.com/karpathy/char-rnn/master/data/tinyshakespeare/input.txt")
 
-    # you can download this file at https://github.com/karpathy/char-rnn/blob/master/data/tinyshakespeare/input.txt
-    text = open('input.txt', 'r').read()  # don't worry we won't run out of file handles
-    train_dataset = CharDataset(text, args.block_size)  # one line of poem is roughly 50 characters
-    train_loader = DataLoader(train_dataset, batch_size=args.batch_size, num_workers=args.num_workers)
+    dm = CharDataModule(args.batch_size, args.num_workers, args.block_size)
 
     model = GPT(
-        vocab_size=train_dataset.vocab_size,
-        block_size=train_dataset.block_size,
+        vocab_size=dm.train_dataset.vocab_size,
+        block_size=dm.train_dataset.block_size,
         n_layer=args.n_layer,
         n_head=args.n_head,
         n_embd=args.n_embd,
@@ -74,7 +95,7 @@ if __name__ == '__main__':
     lr_decay = LearningRateDecayCallback(
         learning_rate=6e-4,
         warmup_tokens=512 * 20,
-        final_tokens=2 * len(train_dataset) * args.block_size
+        final_tokens=2 * len(dm.train_dataset) * args.block_size
     )
 
     trainer = Trainer.from_argparse_args(
@@ -84,4 +105,4 @@ if __name__ == '__main__':
         gradient_clip_val=1.0,
         callbacks=[lr_decay, XLAStatsMonitor()],
     )
-    trainer.fit(model, train_loader)
+    trainer.fit(model, datamodule = dm )
