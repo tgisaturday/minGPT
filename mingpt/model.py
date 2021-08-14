@@ -166,12 +166,13 @@ class GPT(pl.LightningModule):
     def forward(self, idx):
         b, t = idx.size()
         assert t <= self.block_size, "Cannot forward, model block size is exhausted."
-
+        print('forward1')
         # forward the GPT model
         token_embeddings = self.tok_emb(idx) # each index maps to a (learnable) vector
-        #position_embeddings = self.pos_emb[:, :t, :] # each position maps to a (learnable) vector
-        #x = self.drop(token_embeddings + position_embeddings)
-        x = self.drop(token_embeddings)       
+        print('forward2')
+        position_embeddings = self.pos_emb[:, :t, :] # each position maps to a (learnable) vector
+        print('forward3')
+        x = self.drop(token_embeddings + position_embeddings)
         x = self.blocks(x)
         x = self.ln_f(x)
         logits = self.head(x)
