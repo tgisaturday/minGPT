@@ -126,7 +126,7 @@ class GPT(pl.LightningModule):
 
         # input embedding stem
         self.tok_emb = nn.Embedding(vocab_size, n_embd)
-        #self.pos_emb = nn.Parameter(torch.zeros(1, block_size, n_embd))
+        self.pos_emb = nn.Parameter(torch.zeros(1, block_size, n_embd))
         self.drop = nn.Dropout(embd_pdrop)
         # transformer
         self.blocks = nn.Sequential(*[Block(self.config) for _ in range(self.config.n_layer)])
@@ -166,12 +166,10 @@ class GPT(pl.LightningModule):
     def forward(self, idx):
         b, t = idx.size()
         assert t <= self.block_size, "Cannot forward, model block size is exhausted."
-        print('forward1')
+
         # forward the GPT model
         token_embeddings = self.tok_emb(idx) # each index maps to a (learnable) vector
-        print('forward2')
         position_embeddings = self.pos_emb[:, :t, :] # each position maps to a (learnable) vector
-        print('forward3')
         x = self.drop(token_embeddings + position_embeddings)
         x = self.blocks(x)
         x = self.ln_f(x)
