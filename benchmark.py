@@ -82,7 +82,7 @@ if __name__ == '__main__':
         os.system("wget https://raw.githubusercontent.com/karpathy/char-rnn/master/data/tinyshakespeare/input.txt")
 
     dm = CharDataModule(args.batch_size, args.num_workers, args.block_size)
-
+    dm.setup()
     model = GPT(
         vocab_size=dm.train_dataset.vocab_size,
         block_size=dm.train_dataset.block_size,
